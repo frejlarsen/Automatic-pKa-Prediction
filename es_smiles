@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+
+import sys
+import subprocess
+
+def bash(command):
+    """
+    """
+    cmd = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    return cmd.communicate()[0]
+
+
+# GET SMILES
+
+directorylist = subprocess.check_output(['ls'], shell = True)
+smileslist = []
+
+
+if sys.argv[1] in directorylist:
+    strucfile = open(sys.argv[1], "r+")
+    structures = strucfile.read().split('\n')
+    structures = structures[:-1]
+    strucfile.close()
+
+else:
+    structures = [sys.argv[1]]   
+
+
+
+for i in structures:
+     
+    cmd_smilesurl = "curl https://cactus.nci.nih.gov/chemical/structure/" + i + "/smiles"
+    ismiles = subprocess.check_output([cmd_smilesurl], shell = True)
+    if "Page not found" in ismiles:
+        print i, " could not be found on cactus."
+	smileslist.append("missing")
+    else:
+        smileslist.append(ismiles)
+        smifile = open("%s" % i + ".smi", "w+")
+        smifile.write(ismiles)
+        smifile.close()
+
+        cmd_babelstrucs = "obabel -ismi %s -omol2 -0 %s --gen3d > %s" % (i + ".smi", i + ".mol2", i + ".mol2")
+        subprocess.call(cmd_babelstrucs, shell = True)
+        
+        cmd_protonate = "python janscript.py %s > %s" %(i + ".mol2", i + ".xyz") # full protonation
+        subprocess.call(cmd_protonate, shell = True)
+        
+        cmd_deprotonate = "python deprotonate.py %s" % i + ".xyz" # removes 1 hydrogen from all nitrogens
+        subprocess.call(cmd_deprotonate, shell = True)
+        
+	cmd_reprotonate = "python reprotonate.py %s" % i + ".xyz" # removes 1 hydrogen from all nitrogens except 1
+	subprocess.call(cmd_reprotonate, shell = True)
+
+    for end in [".xyz", ".smi", ".mol2"]:
+	cmd_remove = "rm " + i + end
+	subprocess.call(cmd_remove, shell = True)
+
+directorylist = subprocess.check_output(['ls'], shell = True)
+directorylisted = directorylist.split("\n")
+
+xyzfiles = filter(lambda x: ".xyz" in x, directorylisted)
+
+for i in xyzfiles:
+
+    cmd_total = "python es_total.py %s" % i
+    subprocess.call(cmd_total, shell = True)
+
+print "HOLY SHIT ITS WORKING"
+
+
+
